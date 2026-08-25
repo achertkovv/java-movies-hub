@@ -3,6 +3,8 @@ package ru.practicum.moviehub.store;
 import ru.practicum.moviehub.model.Movie;
 
 import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class MoviesStore {
     private final LinkedHashMap<Integer, Movie> movies; // Коллекция фильмов
@@ -27,8 +29,8 @@ public class MoviesStore {
     }
 
     // Удаление фильма по его id
-    public void delMovie(Integer id) {
-        movies.remove(id);
+    public Movie delMovie(Integer id) {
+        return movies.remove(id);
     }
 
     // Удалить все фильмы
@@ -44,5 +46,17 @@ public class MoviesStore {
     // Получить все фильмы
     public LinkedHashMap<Integer, Movie> getMovies() {
         return movies;
+    }
+
+    // Получить все фильмы за определенный год
+    public LinkedHashMap<Integer, Movie> getMoviesByYear(Integer year) {
+        return movies.entrySet().stream()
+                .filter(entry -> entry.getValue().getYear() == year)
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
     }
 }

@@ -1,18 +1,14 @@
 package ru.practicum.moviehub.http;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpExchange;
-import ru.practicum.moviehub.api.ErrorResponse;
 import ru.practicum.moviehub.model.Movie;
 import ru.practicum.moviehub.store.MoviesStore;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public class MoviesHttpHandler extends BaseHttpHandler {
@@ -24,54 +20,82 @@ public class MoviesHttpHandler extends BaseHttpHandler {
 
     @Override
     protected void handleGet(HttpExchange exchange) throws IOException {
-        // Устанавливаем заголовки ответа
-        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-        exchange.sendResponseHeaders(200, 0);
+        String query = exchange.getRequestURI().getQuery();
 
-        JsonArray jsonArray = new JsonArray();
-        LinkedHashMap<Integer, Movie> movies = moviesStore.getMovies();
-        if (movies != null && !movies.isEmpty()) {
-            for (Map.Entry<Integer, Movie> entry : movies.entrySet()) {
-                JsonObject movieObject = getJsonObjectFromEntry(entry);
-                jsonArray.add(movieObject);
+        if (query != null && !query.isEmpty()) {
+            String value = query.substring(query.indexOf('=') + 1);
+            if (query.contains("id")) {
+                // Получаем id из строки запроса
+                int id = 0;
+                try {
+                    id = Integer.parseInt(value);
+                } catch (NumberFormatException e) {
+                    // Код статуса — 400 Bad Request.
+                    sendError(exchange, 400, "Некорректный ID = " + value);
+                    return;
+                }
+                // Получаем фильм по его id
+                Movie movie = moviesStore.getMovie(id);
+                if (movie == null) {
+                    // Код статуса — 404 Not Found.
+                    sendError(exchange, 404, "Фильм не найден");
+                    return;
+                }
+                // Отправляем ответ 200 OK
+                sendResponse(exchange, 200, movie);
+            } else if (query.contains("year")) {
+                // Получаем year из строки запроса
+                int year = 0;
+                try {
+                    year = Integer.parseInt(value);
+                } catch (NumberFormatException e) {
+                    // Код статуса — 400 Bad Request.
+                    sendError(exchange, 400, "Некорректный параметр запроса 'year' — " + value);
+                    return;
+                }
+                // Получаем фильмы отсортированные по year
+                LinkedHashMap<Integer, Movie> movies = moviesStore.getMoviesByYear(year);
+                // Отправляем ответ 200 OK
+                sendResponse(exchange, 200, movies);
+            } else {
+                sendError(exchange, 400, "Некорректный запрос: " + query);
             }
+        } else {
+            JsonArray jsonArray = new JsonArray();
+            LinkedHashMap<Integer, Movie> movies = moviesStore.getMovies();
+            if (movies != null && !movies.isEmpty()) {
+                for (Map.Entry<Integer, Movie> entry : movies.entrySet()) {
+                    JsonObject movieObject = getJsonObjectFromEntry(entry);
+                    jsonArray.add(movieObject);
+                }
+            }
+            // Отправляем ответ 200 OK
+            sendResponse(exchange, 200, jsonArray);
         }
-        String jsonString = jsonArray.toString(); // Получаем [] для пустого массива
-        // Отправляем ответ
-        sendResponse(exchange, jsonString);
     }
 
     @Override
     protected void handlePost(HttpExchange exchange) throws IOException {
-        // получаем входящий поток байтов
-        InputStream inputStream = exchange.getRequestBody();
-        // дожидаемся получения всех данных в виде массива байтов и конвертируем их в строку
-        String body = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-        // создайте экземпляр Gson
-        Gson gson = new Gson();
-        // Получим Movie из Json строки
-        Movie movieDeserialized = gson.fromJson(body, Movie.class);
+        // Восстанавливаем класс из JSON
+        Movie movieDeserialized = parseRequestBody(exchange);
+
+        List<String> contentTypeList = exchange.getRequestHeaders().get("Content-Type");
+        if (contentTypeList == null || !contentTypeList.contains("application/json")) {
+            // Если был получен запрос с неправильным значением заголовка Content-Type:
+            sendError(exchange, 415, "неправильное значение заголовка Content-Type");
+        }
 
         if (movieDeserialized.checkTitle().isBlank() &&
                 movieDeserialized.checkYear().isBlank()) {
             // Если фильм успешно добавлен:
-            // Устанавливаем заголовки ответа
-            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-            // Код статуса — 201 Created.
-            exchange.sendResponseHeaders(201, 0);
             // Тело — JSON созданного фильма с присвоенным ID.
             int id = moviesStore.addMovie(movieDeserialized);
             Movie movie = moviesStore.getMovie(id);
             JsonObject movieObject = getJsonObjectFromEntry(Map.entry(id, movie));
-            // Отправляем ответ
-            sendResponse(exchange, gson.toJson(movieObject));
+            // Отправляем ответ 201 Created
+            sendResponse(exchange, 201, movieObject);
         } else {
             // Если произошла ошибка валидации:
-            // Устанавливаем заголовки ответа
-            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-            // Код статуса — 422 Unprocessable Entity.
-            exchange.sendResponseHeaders(422, 0);
-
             // Тело — объект с информацией об ошибке, содержит следующие поля:
             // error — короткое описание ошибки, например, Ошибка валидации.
             // details — массив строк с деталями проблемы
@@ -84,14 +108,40 @@ public class MoviesHttpHandler extends BaseHttpHandler {
             if (!movieDeserialized.checkYear().isBlank())
                 jsonArray.add(movieDeserialized.checkYear());
             jsonObject.add("details", jsonArray);
-            // Отправляем ответ
-            sendResponse(exchange, gson.toJson(jsonObject));
+            // Отправляем ответ 422 Unprocessable Entity
+            sendResponse(exchange, 422, jsonObject);
         }
     }
 
     @Override
     protected void handleDelete(HttpExchange exchange) throws IOException {
-
+        String query = exchange.getRequestURI().getQuery();
+        if (query != null && !query.isEmpty()) {
+            String value = query.substring(query.indexOf('=') + 1);
+            if (query.contains("id")) {
+                // Получаем id из строки запроса
+                int id = 0;
+                try {
+                    id = Integer.parseInt(value);
+                } catch (NumberFormatException e) {
+                    // Код статуса — 400 Bad Request.
+                    sendError(exchange, 400, "Некорректный ID = " + value);
+                    return;
+                }
+                // Удаляем фильм по его id
+                Movie movie = moviesStore.delMovie(id);
+                if (movie == null) {
+                    // Код статуса — 404 Not Found.
+                    sendError(exchange, 404, "Фильм не найден");
+                    return;
+                }
+                // Отправляем ответ 204 No Content.
+                exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+                exchange.sendResponseHeaders(204, -1);
+            } else {
+                sendError(exchange, 400, "Некорректный запрос: " + query);
+            }
+        }
     }
 
     private JsonObject getJsonObjectFromEntry(Map.Entry<Integer, Movie> entry) {
@@ -100,13 +150,5 @@ public class MoviesHttpHandler extends BaseHttpHandler {
         movieObject.addProperty("title", entry.getValue().getTitle());
         movieObject.addProperty("year", entry.getValue().getYear());
         return movieObject;
-    }
-
-    private void sendResponse(HttpExchange exchange, String jsonString) throws IOException {
-        byte[] responseBytes = jsonString.getBytes(StandardCharsets.UTF_8);
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(responseBytes);
-            os.flush();
-        }
     }
 }
