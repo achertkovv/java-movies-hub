@@ -21,31 +21,35 @@ public class MoviesHttpHandler extends BaseHttpHandler {
     @Override
     protected void handleGet(HttpExchange exchange) throws IOException {
         String query = exchange.getRequestURI().getQuery();
-
-        if (query != null && !query.isEmpty()) {
-            String value = query.substring(query.indexOf('=') + 1);
-            if (query.contains("id")) {
-                // Получаем id из строки запроса
-                int id = 0;
-                try {
-                    id = Integer.parseInt(value);
-                } catch (NumberFormatException e) {
-                    // Код статуса — 400 Bad Request.
-                    sendError(exchange, 400, "Некорректный ID = " + value);
-                    return;
-                }
-                // Получаем фильм по его id
-                Movie movie = moviesStore.getMovie(id);
-                if (movie == null) {
-                    // Код статуса — 404 Not Found.
-                    sendError(exchange, 404, "Фильм не найден");
-                    return;
-                }
-                // Отправляем ответ 200 OK
-                sendResponse(exchange, 200, movie);
-            } else if (query.contains("year")) {
+        // Устранение замечаний: "По спецификации доступ к одному фильму идет по пути:
+        // GET /movies/{id} и DELETE /movies/{id}."
+        String path = exchange.getRequestURI().getPath();
+        String[] pathSplit = path.split("/");
+        String value = pathSplit[pathSplit.length - 1];
+        if (value != null && !value.isEmpty() && !value.equals("movies")) {
+            // Получаем id из пути
+            int id;
+            try {
+                id = Integer.parseInt(value);
+            } catch (NumberFormatException e) {
+                // Код статуса — 400 Bad Request.
+                sendError(exchange, 400, "Некорректный ID = " + value);
+                return;
+            }
+            // Получаем фильм по его id
+            Movie movie = moviesStore.getMovie(id);
+            if (movie == null) {
+                // Код статуса — 404 Not Found.
+                sendError(exchange, 404, "Фильм не найден");
+                return;
+            }
+            // Отправляем ответ 200 OK
+            sendResponse(exchange, 200, movie);
+        } else if (query != null && !query.isEmpty()) {
+            value = query.substring(query.indexOf('=') + 1);
+            if (query.contains("year")) {
                 // Получаем year из строки запроса
-                int year = 0;
+                int year;
                 try {
                     year = Integer.parseInt(value);
                 } catch (NumberFormatException e) {
@@ -80,9 +84,17 @@ public class MoviesHttpHandler extends BaseHttpHandler {
         Movie movieDeserialized = parseRequestBody(exchange);
 
         List<String> contentTypeList = exchange.getRequestHeaders().get("Content-Type");
-        if (contentTypeList == null || !contentTypeList.contains("application/json")) {
+        // Устранение замечаний: проверка Content-Type. contentTypeList.contains(application/json) сравнивает
+        // элементы списка целиком, поэтому корректный заголовок application/json; charset=UTF-8 не пройдет проверку
+        // и клиент получит 415 на валидный запрос. Тест этого не ловит, так как отправляет заголовок без charset.
+        // Сравнивайте через startsWith по первому значению заголовка
+        if (contentTypeList == null || !contentTypeList.getFirst().startsWith("application/json")) {
             // Если был получен запрос с неправильным значением заголовка Content-Type:
             sendError(exchange, 415, "неправильное значение заголовка Content-Type");
+            // Устранение замечаний: "После отправки 415 нет return, выполнение идет дальше: вы пытаетесь
+            // провалидировать фильм и отправить второй ответ в уже завершенный обмен. Это либо исключение,
+            // либо порча ответа клиенту.
+            return;
         }
 
         if (movieDeserialized.checkTitle().isBlank() &&
@@ -120,7 +132,7 @@ public class MoviesHttpHandler extends BaseHttpHandler {
             String value = query.substring(query.indexOf('=') + 1);
             if (query.contains("id")) {
                 // Получаем id из строки запроса
-                int id = 0;
+                int id;
                 try {
                     id = Integer.parseInt(value);
                 } catch (NumberFormatException e) {

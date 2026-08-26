@@ -80,14 +80,14 @@ public class MoviesApiTest {
 
             HttpRequest req = HttpRequest.newBuilder()
                     .GET()
-                    .uri(URI.create("http://localhost:8080/movies?id=2"))
+                    .uri(URI.create("http://localhost:8080/movies/2"))
                     .build();
 
             HttpResponse.BodyHandler<String> responseBodyHandler =
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8);
             HttpResponse<String> resp = client.send(req, responseBodyHandler);
 
-            assertEquals(200, resp.statusCode(), "GET /movies?id=2 должен вернуть 200");
+            assertEquals(200, resp.statusCode(), "GET /movies/2 должен вернуть 200");
 
             String contentTypeHeaderValue =
                     resp.headers().firstValue("Content-Type").orElse("");
@@ -108,14 +108,14 @@ public class MoviesApiTest {
 
             HttpRequest req = HttpRequest.newBuilder()
                     .GET()
-                    .uri(URI.create("http://localhost:8080/movies?id=two"))
+                    .uri(URI.create("http://localhost:8080/movies/two"))
                     .build();
 
             HttpResponse.BodyHandler<String> responseBodyHandler =
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8);
             HttpResponse<String> resp = client.send(req, responseBodyHandler);
 
-            assertEquals(400, resp.statusCode(), "GET /movies?id=two должен вернуть 400");
+            assertEquals(400, resp.statusCode(), "GET /movies/two должен вернуть 400");
 
             String body = resp.body().trim();
             assertTrue(body.contains("Некорректный ID"),
@@ -131,14 +131,14 @@ public class MoviesApiTest {
 
             HttpRequest req = HttpRequest.newBuilder()
                     .GET()
-                    .uri(URI.create("http://localhost:8080/movies?id=0"))
+                    .uri(URI.create("http://localhost:8080/movies/0"))
                     .build();
 
             HttpResponse.BodyHandler<String> responseBodyHandler =
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8);
             HttpResponse<String> resp = client.send(req, responseBodyHandler);
 
-            assertEquals(404, resp.statusCode(), "GET /movies?id=0 должен вернуть 404");
+            assertEquals(404, resp.statusCode(), "GET /movies/0 должен вернуть 404");
 
             String body = resp.body().trim();
             assertTrue(body.contains("Фильм не найден"),
@@ -312,7 +312,7 @@ public class MoviesApiTest {
 
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create("http://localhost:8080/movies"))
-                    .header("Content-Type", "application/xml")
+                    .header("Content-Type", "application/xml; charset=UTF-8")
                     .POST(HttpRequest.BodyPublishers.ofString("{\"title\":\"Test4\", \"year\":2026}"))
                     .build();
 

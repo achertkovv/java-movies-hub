@@ -13,8 +13,10 @@ import java.time.format.DateTimeFormatter;
 public class ErrorResponse {
 
     private final Gson gson;
+    private final PrintWriter printWriter;
 
     public ErrorResponse() {
+        this.printWriter = new PrintWriter();
         this.gson = new GsonBuilder()
                 .setPrettyPrinting()
                 .create();
@@ -26,7 +28,9 @@ public class ErrorResponse {
     }
 
     public void sendInternalServerError(HttpExchange exchange, Exception e) throws IOException {
-        String message = "Internal server error: " + e.getMessage();
+        // Устранение замечаний: "Логируйте исключение и отдавайте наружу нейтральный текст"
+        printWriter.write(e);
+        String message = "Внутренняя ошибка сервера";
         sendError(exchange, 500, message, null);
     }
 
